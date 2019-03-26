@@ -32,14 +32,12 @@ if (!defined($climode)){
 
         open(OUTFILE, ">tmpFile") ;
         while ($bytesread = read($io_handle, $buffer, 1024)) {
-            #$instream += "$buffer";
             print OUTFILE $buffer;
         }
         close OUTFILE;
     }
     $flightlog = "tmpFile";
         print "<br>";
-    #    print "$instream<br>\n"
 } else {
     $flightlog = $ARGV[0];
 }
@@ -58,7 +56,12 @@ while (<FLIGHTLOG>){
         $_= $1;
     }
     @logline = split(/\t/);
-    print "<br>$logline[0] ++ $logline[1] ++ $logline[2] ++ $logline[3] ++ $logline[4] ++ $logline[5]\n" unless !$debug;
+    for ($i = 0; $i < $#logline; $i++){
+        
+        #print "$i $logline[$i]|";
+    }
+    #print "\n";
+    #next;
     next unless $logline[0] =~ /^\w/;
     if ($logline[4] =~/nm/){
         ($fromto, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
@@ -125,9 +128,6 @@ sub readAirportDirectory {
         $ICAO = $airportLine[1];
         $ap_name = $airportLine[3];
         $p_name = trimName($ap_name);
-        $ICAO{$p_name} = $ICAO;
-        $p_name =~ s/-/ /;
-        $ICAO{$p_name}  = $ICAO;
         $p_name = normalizeName($p_name);
         $ICAO{$p_name}  = $ICAO;
     }
@@ -135,25 +135,32 @@ sub readAirportDirectory {
 
 sub getICAO {
     my $name = shift;
-    my $dashname = $name; $dashname =~ s/-/ /;
+    my $dashname = normalizeName($name);
     return $ICAO{$name} || $ICAO{$dashname} ||  "$name";
 }
 
+#strip off any decoration in the name of the world airport database
 sub trimName {
     my $name = shift;
     $name =~ s/"(.*)"/$1/;
     $name =~ s/ Airport//;
     $name =~ s/ Heliport//;
     $name =~ s/ Airfield//;
+    $name =~ s/Flugplatz //;
+    $name =~ s/Airport //;
     return $name;
 }
 
+#remove any ambiguos spelling options
 sub normalizeName {
     my $name = shift;
     $name =~ s/ä/ae/g;
     $name =~ s/ü/ue/g;
     $name =~ s/ö/oe/g;
     $name =~ s/ß/ss/g;
+    $name =~ s/é/e/g;
+    $name =~ s/-//g;
+    $name =~ s/ //g;
     return $name;
 }
 
