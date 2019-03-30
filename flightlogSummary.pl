@@ -15,13 +15,13 @@ GetOptions ("airportDir=s" => \$airportDirectory,
 
 
 #$debug = 1;
-$query = CGI->new;
-$pilot = $query->param('pilot');
 
 readAirportDirectory();
 
 
 if (!defined($climode)){
+    $query = CGI->new;
+    $pilot = $query->param('pilot');
     print   $query->header,
             $query->start_html;
 
@@ -55,34 +55,79 @@ while (<FLIGHTLOG>){
     if (/^\(.+ nm\) (.+)/){
         $_= $1;
     }
-    @logline = split(/\t/);
-    for ($i = 0; $i < $#logline; $i++){
-        
-        #print "$i $logline[$i]|";
-    }
-    #print "\n";
-    #next;
+    my $validline = 0;
+    my $toindex = 0;
+    my $toend = 0;
+    my $plane ="Unknown";
+    my $takeoff = "";
+    my $duration = "";
+    
+    my $from = ""; my $to = "";
+    @logline = split(/\s/);
     next unless $logline[0] =~ /^\w/;
-    if ($logline[4] =~/nm/){
-        ($fromto, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
-        $plane = "Unknown";
-    } elsif ($logline[5] =~/nm/){
-        ($fromto, $plane, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
-    } elsif ($logline[3] =~/nm/){
-        ($fromto, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
-        if ($fromto =~ /([^2]+)(2018\/\d\d\/\d\d \d\d:\d\d)/){
-            $fromto = $1;
-            $takeoff = $2;
-            $fromto =~ s/ *$//;
-            $plane = "Unknown";
+
+    for ($i = 0; $i < $#logline; $i++){
+        if ($logline[$i] eq "-"){
+            $toindex = $i + 1;
+            for ($j = 0; $j < $i; $j++){
+                print "$j $logline[$j] " if $debug;
+                $from .= $logline[$j];
+            }
+            print "\n FROM $from \n" if $debug;
+        }
+        if ($logline[$i] =~ /(20\d\d\/\d\d\/\d\d)/ && ($toindex > 0) && $to eq ""){
+            $validline = 1;
+            $date = $1;
+            my $toend = $i;
+            if (isAircraft($logline[$i-1]) == 1){
+                $toend = $i -1;
+                $plane = $logline[$i - 1];
+                print "$i $plane " if $debug;
+            }
+
+            for (my $j = $toindex; $j < $toend; $j++){
+                print "$j $logline[$j] " if $debug;
+                $to .= $logline[$j];
+            }
+            print "\n TO $to \n" if $debug;
+
+            if ($logline[$i + 1] =~ /(\d\d:\d\d)/){
+                $takeoff = $date . " " . $1;
+                print "TAKEOFF $takeoff\n" if $debug;
+            }
+        }
+        if ($logline[$i] eq "hr"){
+            print "$i $logline[$i] " if $debug;
+            $duration .= $logline[$i - 1] . " hr ";
+        }
+        if ($logline[$i] eq "min"){
+            print "$i $logline[$i] " if $debug;
+            $duration .= $logline[$i - 1] . " min";
+            print "DURATION $duration\n" if $debug;
+        }
+        if ($logline[$i] eq "m"){
+            print "$i $logline[$i] " if $debug;
+            $duration .= $logline[$i - 1] . " m";
+            print "DURATION $duration\n" if $debug;
         }
     }
-    
-    else {
-        next;
-    }
 
-    ($from, $to) = split (/ - /, $fromto);
+#    if ($logline[4] =~/nm/){
+#        ($fromto, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
+#        $plane = "Unknown";
+#    } elsif ($logline[5] =~/nm/){
+#        ($fromto, $plane, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
+#    } elsif ($logline[3] =~/nm/){
+#        ($fromto, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
+#        if ($fromto =~ /([^2]+)(2018\/\d\d\/\d\d \d\d:\d\d)/){
+#            $fromto = $1;
+#            $takeoff = $2;
+#            $fromto =~ s/ *$//;
+#            $plane = "Unknown";
+#        }
+#    }
+    
+    next unless $validline == 1;
     $fromICAO = getICAO($from);
     $toICAO = getICAO($to);
     
@@ -107,6 +152,18 @@ close OUTFILE;
 if (!defined($climode)){
     unlink "tmpFile";
     print $query->end_html;
+}
+
+sub isAircraft {
+    my $airplane = shift;
+    $airplane = lc $airplane;
+    if ($airplane eq "unknown"){
+        return 1;
+    }
+    if (length $airplane == 5 && $airplane =~ /^de/){
+        return 1;
+    }
+    return 0;
 }
 
 sub readAirportDirectory {
@@ -148,6 +205,7 @@ sub trimName {
     $name =~ s/ Airfield//;
     $name =~ s/Flugplatz //;
     $name =~ s/Airport //;
+    $name =~ s/Aviosuperficie //;
     return $name;
 }
 
@@ -161,6 +219,8 @@ sub normalizeName {
     $name =~ s/é/e/g;
     $name =~ s/-//g;
     $name =~ s/ //g;
+    $name =~s/\///g;
+    $name = lc($name);
     return $name;
 }
 
