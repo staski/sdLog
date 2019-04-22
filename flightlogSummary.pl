@@ -5,6 +5,11 @@ use CGI;
 use CGI::Carp qw ( fatalsToBrowser );
 use Getopt::Long;
 
+require File::Temp;
+use File::Temp ();
+my $tmpfile;
+
+
 $CGI::POST_MAX=1024 * 512;
 my $airportDirectory ="world-airports.csv";
 
@@ -13,8 +18,6 @@ GetOptions ("airportDir=s" => \$airportDirectory,
     "climode=s" => \$climode,
     "debug=s" => \$debug);
 
-
-#$debug = 1;
 
 readAirportDirectory();
 
@@ -26,29 +29,27 @@ if (!defined($climode)){
             $query->start_html;
 
     $lfh  = $query->upload('theFile');
+    $tmpfile = File::Temp->new();
+    $flightlog = $tmpfile->filename;
     if (defined $lfh) {
         # Upgrade the handle to one compatible with IO::Handle:
         my $io_handle = $lfh->handle;
 
-        open(OUTFILE, ">tmpFile") ;
         while ($bytesread = read($io_handle, $buffer, 1024)) {
-            print OUTFILE $buffer;
+            print $tmpfile $buffer;
         }
-        close OUTFILE;
+        close $tmpfile;
     }
-    $flightlog = "tmpFile";
         print "<br>";
 } else {
     $flightlog = $ARGV[0];
 }
 
+print "$flightlog\n" if $debug;
+
 print "Date; Pilot; Plane; FROM; TO; Start; Duration\n";
 
-if (!defined($climode)){
-    open(FLIGHTLOG, "<", "tmpFile") || die "cant open INSTREAM: $!";
-} else {
-    open(FLIGHTLOG, "$flightlog" ) || die "can't open flightlog file $flightlog: $!";
-}
+open(FLIGHTLOG, "<", "$flightlog") || die "cant open $flightlog: $!";
 
 while (<FLIGHTLOG>){
     
@@ -111,21 +112,6 @@ while (<FLIGHTLOG>){
             print "DURATION $duration\n" if $debug;
         }
     }
-
-#    if ($logline[4] =~/nm/){
-#        ($fromto, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
-#        $plane = "Unknown";
-#    } elsif ($logline[5] =~/nm/){
-#        ($fromto, $plane, $takeoff, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
-#    } elsif ($logline[3] =~/nm/){
-#        ($fromto, $duration, $landing, $distance,$blocktime,$enginetime) = @logline;
-#        if ($fromto =~ /([^2]+)(2018\/\d\d\/\d\d \d\d:\d\d)/){
-#            $fromto = $1;
-#            $takeoff = $2;
-#            $fromto =~ s/ *$//;
-#            $plane = "Unknown";
-#        }
-#    }
     
     next unless $validline == 1;
     $fromICAO = getICAO($from);
@@ -147,10 +133,10 @@ while (<FLIGHTLOG>){
     print "$date $time;$pilot;$plane;$fromICAO;$toICAO;$date $time;$dmins\n";
 }
 
-close OUTFILE;
+close FLIGHTLOG;
 
 if (!defined($climode)){
-    unlink "tmpFile";
+    unlink "$flightlog";
     print $query->end_html;
 }
 
